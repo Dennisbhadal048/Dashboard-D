@@ -37,6 +37,12 @@ def run_home():
                 Menganalisis korelasi antara Indeks Panas (suhu dan kelembapan) harian dengan intensitas cuitan dan interaksi di media sosial X (Twitter). Menggunakan model korelasi Pearson dan *time-series tracking*.
             </p>
         </div>
+        <div style="background: rgba(30, 41, 59, 0.4); padding: 20px; border-radius: 10px; border-left: 3px solid #FF0055;">
+            <h4 style="color: #F8FAFC; margin-bottom: 5px;">⚙️ Modul 2: UNIVERSAL MET-CLIMATE DATA INGESTION</h4>
+            <p style="color: #94A3B8; font-size: 0.95rem; margin-bottom: 0;">
+                Memproses dan mengintegrasikan data cuaca dari berbagai sumber (satelit, stasiun meteorologi, model numerik) ke dalam format standar untuk analisis lanjutan.
+            </p>
+        </div>
         """, unsafe_allow_html=True)
     
     st.markdown("<br><br>", unsafe_allow_html=True)

@@ -101,17 +101,16 @@ halaman_proyek_1 = st.Page(
     icon="📡"
 )
 
-# Jika nanti ada proyek 2, bisa di-uncomment
-# halaman_proyek_2 = st.Page(
-#     "Page/proyek2.py", 
-#     title="Analisis Pemodelan Baru", 
-#     icon="🧠"
-# )
+halaman_proyek_2 = st.Page(
+    "Page/proyek2.py", 
+    title="UNIVERSAL MET-CLIMATE DATA INGESTION", 
+    icon="⚙️"
+)
 
 # 4. INISIALISASI NAVIGASI
 pg = st.navigation({
     "MAIN HUB": [halaman_home],
-    "DATA MODULES": [halaman_proyek_1] # Tambahkan halaman_proyek_2 di sini nanti
+    "DATA MODULES": [halaman_proyek_1, halaman_proyek_2]
 })
 
 pg.run()
