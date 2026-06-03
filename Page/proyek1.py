@@ -3,33 +3,31 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import calendar
 from html import escape
 
+# --- TEMA PLOTLY FUTURISTIK (DARK MODE) ---
 PLOT_THEME = dict(
-    template="plotly_white",
-    font=dict(color="#17212B", family="Segoe UI"),
-    paper_bgcolor="rgba(255,255,255,0)",
-    plot_bgcolor="rgba(255,255,255,0)",
-    margin=dict(l=28, r=22, t=58, b=28),
-    hoverlabel=dict(bgcolor="#17212B", font_size=12, font_color="#FFFFFF"),
+    template="plotly_dark",
+    font=dict(color="#94A3B8", family="Segoe UI"),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    margin=dict(l=30, r=25, t=55, b=30),
+    hoverlabel=dict(bgcolor="#0F172A", font_size=12, font_color="#00F0FF", bordercolor="#00F0FF"),
 )
-
 
 def polish_figure(fig, height=None):
     fig.update_layout(**PLOT_THEME)
-    fig.update_xaxes(showgrid=True, gridcolor="#E8EEF4", zeroline=False)
-    fig.update_yaxes(showgrid=True, gridcolor="#E8EEF4", zeroline=False)
+    fig.update_xaxes(showgrid=True, gridcolor="#1E293B", zeroline=False)
+    fig.update_yaxes(showgrid=True, gridcolor="#1E293B", zeroline=False)
     if height:
         fig.update_layout(height=height)
     return fig
 
-
 def section_header(title, caption=None):
-    st.markdown(f"### {title}")
+    st.markdown(f"<h3 style='color: #00F0FF; margin-top: 20px; margin-bottom: 5px;'>{title}</h3>", unsafe_allow_html=True)
     if caption:
-        st.caption(caption)
+        st.markdown(f"<p style='color:#64748B; font-size:0.95rem; margin-bottom: 15px;'>{caption}</p>", unsafe_allow_html=True)
 
 # --- FUNGSI FISIS (VEKTOR) ---
 def calculate_heat_index_vectorized(T_c, RH):
@@ -54,13 +52,15 @@ def load_weather_data(file_path):
     if timestamp_col:
         df['date'] = pd.to_datetime(df[timestamp_col[0]], format='%d/%m/%Y %H:%M', errors='coerce')
     else:
-        st.error(f"Kolom Waktu tidak terdeteksi! Struktur kolom: {list(df.columns)}")
+        st.error("Kolom Waktu tidak terdeteksi!")
         st.stop()
     temp_col = [col for col in df.columns if 'temp' in col.lower() or 'dry' in col.lower()]
     rh_col = [col for col in df.columns if 'humidity' in col.lower() or 'rh' in col.lower()]
     
-    df['heat_index_c'] = calculate_heat_index_vectorized(df[temp_col[0]], df[rh_col[0]])
-    df['temp_drybulb_c_ttttt'] = df[temp_col[0]]
+    # Standarisasi penamaan kolom fisis asli
+    df['air_temperature'] = df[temp_col[0]]
+    df['relative_humidity'] = df[rh_col[0]]
+    df['heat_index_c'] = calculate_heat_index_vectorized(df['air_temperature'], df['relative_humidity'])
     return df
 
 @st.cache_data
@@ -71,7 +71,7 @@ def load_twitter_data(file_path):
     if date_col:
         df['date'] = pd.to_datetime(df[date_col[0]], format='%d/%m/%Y', errors='coerce')
     else:
-        st.error(f"Kolom Tanggal tidak terdeteksi! Struktur kolom: {list(df.columns)}")
+        st.error("Kolom Tanggal tidak terdeteksi!")
         st.stop()
         
     if 'Total Interaksi' in df.columns:
@@ -91,17 +91,18 @@ TWITTER_CSV = "Data/data_tweet_harian.csv"
 try:
     temp_data = load_weather_data(WEATHER_CSV)
     twitter_data = load_twitter_data(TWITTER_CSV)
-except FileNotFoundError as e:
-    st.error(f"⚠️ **File CSV Utama Tidak Ditemukan!**")
+except FileNotFoundError:
+    st.error("⚠️ **File CSV Utama Tidak Ditemukan! Periksa direktori Data/.**")
     st.stop()
 
-# --- FILTER CONTROL (GLOBAL SIDEBAR DATE RANGE) ---
+# --- FILTER CONTROL (SIDEBAR) ---
 min_date = temp_data['date'].min().date()
 max_date = temp_data['date'].max().date()
 
-st.sidebar.subheader("Filter Waktu (berpengaruh ke seluruh halaman proyek)")
+st.sidebar.markdown("---")
+st.sidebar.markdown("<span style='color:#00F0FF; font-weight:bold;'>⚙️ PARAMETER KONTROL</span>", unsafe_allow_html=True)
 date_range = st.sidebar.date_input(
-    "Pilih Rentang Tanggal", value=(min_date, max_date), min_value=min_date, max_value=max_date
+    "Rentang Observasi Temporal", value=(min_date, max_date), min_value=min_date, max_value=max_date
 )
 
 if isinstance(date_range, tuple) and len(date_range) == 2:
@@ -109,11 +110,29 @@ if isinstance(date_range, tuple) and len(date_range) == 2:
     filtered_temp = temp_data[(temp_data['date'].dt.date >= start_d) & (temp_data['date'].dt.date <= end_d)].copy()
     filtered_twitter = twitter_data[(twitter_data['date'].dt.date >= start_d) & (twitter_data['date'].dt.date <= end_d)].copy()
 else:
-    # fallback to full data
     filtered_temp = temp_data.copy()
     filtered_twitter = twitter_data.copy()
 
-# --- TAMPILAN UTAMA PROYEK 1 ---
+# --- AGREGASI DATA GLOBAL (PENTING: Dipakai Bersama oleh Tab 1, Tab 2, dan Tab 4) ---
+if not filtered_temp.empty:
+    # Agregat harian parameter cuaca (mean)
+    daily_weather = filtered_temp.groupby(filtered_temp['date'].dt.date)[['air_temperature', 'relative_humidity', 'heat_index_c']].mean().reset_index()
+    
+    # Kuantifikasi harian parameter sosial
+    text_col = [col for col in filtered_twitter.columns if 'teks' in col.lower() or 'tweet' in col.lower() or 'text' in col.lower()]
+    actual_text_col = text_col[0] if text_col else filtered_twitter.columns[0]
+    daily_twitter = filtered_twitter.groupby(filtered_twitter['date'].dt.date).agg(
+        jumlah_tweet=(actual_text_col, 'count'),
+        total_interaksi=('interaction_score', 'sum')
+    ).reset_index()
+
+    # Penggabungan dataframe harian secara utuh
+    merged_daily = pd.merge(daily_weather, daily_twitter, on='date', how='left').fillna(0)
+    merged_daily['total_respon'] = merged_daily['jumlah_tweet'] + merged_daily['total_interaksi']
+else:
+    merged_daily = pd.DataFrame()
+
+# --- HEADER TAMPILAN ---
 selected_days = (end_d - start_d).days + 1 if 'start_d' in locals() and 'end_d' in locals() else (max_date - min_date).days + 1
 peak_hi = filtered_temp['heat_index_c'].max() if not filtered_temp.empty else np.nan
 filtered_tweet_count = len(filtered_twitter)
@@ -121,30 +140,25 @@ filtered_tweet_count = len(filtered_twitter)
 st.markdown(
     f"""
     <div style="
-        background: linear-gradient(135deg, #17212B 0%, #29475A 58%, #E4572E 100%);
-        border-radius: 8px;
-        padding: 28px 30px;
-        margin-bottom: 20px;
-        box-shadow: 0 18px 42px rgba(23,33,43,0.18);
+        background: linear-gradient(135deg, rgba(16,24,39,0.85) 0%, rgba(30,41,59,0.65) 100%);
+        border: 1px solid #1E293B; border-radius: 12px; padding: 25px; margin-bottom: 25px;
+        box-shadow: 0 0 20px rgba(0,240,255,0.1); backdrop-filter: blur(10px);
     ">
-        <div style="color: rgba(255,255,255,0.74); font-size: 0.92rem; font-weight: 650; text-transform: uppercase; letter-spacing: 0;">
-            Kemayoran Climate Intelligence
+        <div style="color: #00F0FF; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 2px;">
+            ● Telemetry Status: Connected | Kemayoran Station Radar
         </div>
-        <h1 style="color: #FFFFFF !important; margin: 8px 0 8px; font-size: 2.25rem;">
-            Heat Index & Public Response Monitor
-        </h1>
-        <p style="color: rgba(255,255,255,0.86); max-width: 820px; font-size: 1.02rem; margin: 0;">
-            Integrasi parameter fisis atmosfer permukaan dengan dinamika ekspresi masyarakat DKI Jakarta.
-        </p>
-        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px;">
-            <span style="background: rgba(255,255,255,0.14); color: #FFFFFF; border: 1px solid rgba(255,255,255,0.18); border-radius: 999px; padding: 7px 12px; font-weight: 650;">
-                {selected_days:,} hari data
+        <h2 style="color: #FFFFFF; margin: 8px 0; font-size: 2.2rem; font-weight: 600;">
+            ANALISIS INDEKS TERMAL & VALIDASI SOSIAL
+        </h2>
+        <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 15px;">
+            <span style="background: rgba(0,240,255,0.1); color: #00F0FF; border: 1px solid rgba(0,240,255,0.3); border-radius: 4px; padding: 4px 10px; font-family: monospace; font-size:0.85rem;">
+                TIME WINDOW: {selected_days:,} DAYS
             </span>
-            <span style="background: rgba(255,255,255,0.14); color: #FFFFFF; border: 1px solid rgba(255,255,255,0.18); border-radius: 999px; padding: 7px 12px; font-weight: 650;">
-                Puncak HI {peak_hi:.1f} C
+            <span style="background: rgba(255,0,85,0.1); color: #FF0055; border: 1px solid rgba(255,0,85,0.3); border-radius: 4px; padding: 4px 10px; font-family: monospace; font-size:0.85rem;">
+                PEAK HI: {peak_hi:.1f} °C
             </span>
-            <span style="background: rgba(255,255,255,0.14); color: #FFFFFF; border: 1px solid rgba(255,255,255,0.18); border-radius: 999px; padding: 7px 12px; font-weight: 650;">
-                {filtered_tweet_count:,} cuitan terfilter
+            <span style="background: rgba(0,255,136,0.1); color: #00FF88; border: 1px solid rgba(0,255,136,0.3); border-radius: 4px; padding: 4px 10px; font-family: monospace; font-size:0.85rem;">
+                TOTAL CUITAN: {filtered_tweet_count:,} ROWS
             </span>
         </div>
     </div>
@@ -152,249 +166,139 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Tampilan Metrik Sejajar
+# --- METRIK HUD UTAMA ---
 m1, m2, m3, m4 = st.columns(4)
 with m1:
-    if not filtered_temp.empty:
-        st.metric("Rata-rata Suhu Udara", f"{filtered_temp['temp_drybulb_c_ttttt'].mean():.1f} °C")
+    if not filtered_temp.empty: st.metric("Rata-rata Suhu", f"{filtered_temp['air_temperature'].mean():.1f} °C")
 with m2:
-    if not filtered_temp.empty:
-        st.metric("Rata-rata Indeks Panas", f"{filtered_temp['heat_index_c'].mean():.1f} °C")
+    if not filtered_temp.empty: st.metric("Rata-rata Heat Index", f"{filtered_temp['heat_index_c'].mean():.1f} °C")
 with m3:
-    st.metric("Total Sampel Cuitan", f"{len(filtered_twitter):,} Tweet")
+    st.metric("Total Sampel Cuitan", f"{len(filtered_twitter):,}")
 with m4:
-    st.metric("Total Akumulasi Interaksi", f"{filtered_twitter['interaction_score'].sum():,}")
+    st.metric("Akumulasi Interaksi", f"{filtered_twitter['interaction_score'].sum():,}")
 
-# Peta ditempatkan di luar tab sesuai permintaan
-section_header("Batas Geografis Representatif", "Radius observasi 15 km dari titik rujukan Kemayoran, Jakarta.")
-jkt_lat, jkt_lon = -6.2088, 106.8456
-angles = np.linspace(0, 2*np.pi, 100)
-r_earth = 6371.0 
-radius_target = 15.0 
-lat_offsets = (radius_target / r_earth) * (180 / np.pi) * np.sin(angles)
-lon_offsets = (radius_target / r_earth) * (180 / np.pi) * np.cos(angles) / np.cos(jkt_lat * np.pi / 180)
+# --- PEMBAGIAN TAB KONTROL ---
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📈 TREN HARIAN", 
+    "📅 ANALISIS BULANAN", 
+    "🏆 TOP 10 LOG TWEET", 
+    "🔬 METODOLOGI & DATA"
+])
 
-circle_lats = jkt_lat + lat_offsets
-circle_lons = jkt_lon + lon_offsets 
-
-fig_map = go.Figure()
-fig_map.add_trace(go.Scattermapbox(lat=circle_lats, lon=circle_lons, mode='lines', fill='toself', fillcolor='rgba(231, 76, 60, 0.12)', line=dict(color='#C0392B', width=2), name="Radius Area Jakarta (~15 Km)"))
-fig_map.add_trace(go.Scattermapbox(lat=[jkt_lat], lon=[jkt_lon], mode='markers', marker=go.scattermapbox.Marker(size=12, color='#C0392B'), showlegend=False))
-
-fig_map.update_layout(
-    mapbox=dict(style="open-street-map", center=go.layout.mapbox.Center(lat=jkt_lat, lon=jkt_lon), zoom=10),
-    margin={"r":0,"t":10,"l":0,"b":0}, 
-    height=450
-)
-st.plotly_chart(fig_map, use_container_width=True)
-
-# Menggunakan ikon emoji murni pada penamaan tab agar terhindar dari pemotongan visual teks CSS
-tab1, tab_month, tab2, tab3 = st.tabs(["📈 Tren Waktu", "📅 Tren Bulanan & Heatmap", "📊 Karakteristik Respon", "📋 Arsip Data"])
-
+# ==================== TAB 1: ANALISIS HARIAN ====================
 with tab1:
-    section_header("Analisis Sinkronisasi Temporal", "Membandingkan perubahan indeks panas dengan volume percakapan harian.")
-    if filtered_temp.empty:
-        st.warning("Tidak ada data pada rentang tanggal yang dipilih di sidebar.")
+    section_header("Sinkronisasi Temporal Harian", "Analisis runtun waktu parameter fisis atmosfer versus volume cuitan publik per hari.")
+    
+    if merged_daily.empty:
+        st.warning("Tidak ada data pada rentang waktu yang dipilih.")
     else:
-        # daily aggregates
-        daily_weather = filtered_temp.groupby(filtered_temp['date'].dt.date).mean(numeric_only=True).reset_index()
-        text_col = [col for col in filtered_twitter.columns if 'teks' in col.lower() or 'tweet' in col.lower() or 'text' in col.lower()]
-        actual_text_col = text_col[0] if text_col else filtered_twitter.columns[0]
-        daily_twitter = filtered_twitter.groupby(filtered_twitter['date'].dt.date).agg(
-            jumlah_tweet=(actual_text_col, 'count'),
-            total_interaksi=('interaction_score', 'sum')
-        ).reset_index()
+        # Grafik Utama Harian
+        fig_count = px.line(merged_daily, x='date', y='jumlah_tweet', title='Volume Cuitan Harian (Indikator Utama)', color_discrete_sequence=['#00F0FF'])
+        polish_figure(fig_count, 300)
 
-        merged_daily = pd.merge(daily_weather, daily_twitter, on='date', how='left').fillna(0)
-        merged_daily['total_respon'] = merged_daily['jumlah_tweet'] + merged_daily['total_interaksi']
+        fig_hi = px.line(merged_daily, x='date', y='heat_index_c', title='Fluktuasi Indeks Termal Harian (°C)', color_discrete_sequence=['#FF0055'])
+        polish_figure(fig_hi, 300)
 
-        # 1) Timeseries - Jumlah Cuitan
-        fig_count = px.line(
-            daily_twitter,
-            x='date', y='jumlah_tweet',
-            title='Jumlah Cuitan Harian',
-            labels={'date': 'Tanggal', 'jumlah_tweet': 'Jumlah Cuitan'},
-            template='plotly_white',
-            color_discrete_sequence=['#1F77B4']
-        )
-        polish_figure(fig_count, 340)
-
-        # 2) Timeseries - Jumlah Cuitan + Interaksi (Total Respon)
-        fig_count_inter = px.line(
-            merged_daily,
-            x='date', y='total_respon',
-            title='Jumlah Cuitan + Interaksi Harian',
-            labels={'date': 'Tanggal', 'total_respon': 'Jumlah + Interaksi'},
-            template='plotly_white',
-            color_discrete_sequence=['#2CA02C']
-        )
-        polish_figure(fig_count_inter, 340)
-
-        # 3) Timeseries - Heat Index
-        fig_hi = px.line(
-            merged_daily,
-            x='date', y='heat_index_c',
-            title='Heat Index Harian',
-            labels={'date': 'Tanggal', 'heat_index_c': 'Indeks Panas (°C)'},
-            template='plotly_white',
-            color_discrete_sequence=['#E74C3C']
-        )
-        polish_figure(fig_hi, 340)
-
-        # 4) Korelasi Heat Index vs Jumlah Cuitan
         corr_val = merged_daily['heat_index_c'].corr(merged_daily['jumlah_tweet'])
-        corr_text = f"r={corr_val:.2f}" if not np.isnan(corr_val) else 'r=N/A'
-        fig_corr = px.scatter(
-            merged_daily,
-            x='heat_index_c', y='jumlah_tweet',
-            title=f'Korelasi Heat Index vs Jumlah Cuitan ({corr_text})',
-            labels={'heat_index_c': 'Indeks Panas (°C)', 'jumlah_tweet': 'Jumlah Cuitan'},
-            template='plotly_white',
-            color_discrete_sequence=['#9467BD']
-        )
-        fig_corr.update_traces(marker=dict(size=9, opacity=0.78, line=dict(width=1, color="#FFFFFF")))
-        polish_figure(fig_corr, 340)
+        corr_text = f"r = {corr_val:.2f}" if not np.isnan(corr_val) else 'r = N/A'
+        fig_corr = px.scatter(merged_daily, x='heat_index_c', y='jumlah_tweet', title=f'Korelasi Scatter Harian ({corr_text})', color_discrete_sequence=['#B900FF'], trendline="ols")
+        polish_figure(fig_corr, 300)
 
-        # Display 4 charts in a 2x2 grid
+        fig_count_inter = px.line(merged_daily, x='date', y='total_respon', title='Aktivitas Akumulasi Interaksi (Informasi Tambahan - Rentan Bias)', color_discrete_sequence=['#00FF88'])
+        polish_figure(fig_count_inter, 300)
+
+        # Layout Grid Grafik Harian
         c1, c2 = st.columns(2)
-        with c1:
-            st.plotly_chart(fig_count, use_container_width=True)
-        with c2:
-            st.plotly_chart(fig_count_inter, use_container_width=True)
+        with c1: st.plotly_chart(fig_count, use_container_width=True)
+        with c2: st.plotly_chart(fig_hi, use_container_width=True)
 
         c3, c4 = st.columns(2)
-        with c3:
-            st.plotly_chart(fig_hi, use_container_width=True)
-        with c4:
-            st.plotly_chart(fig_corr, use_container_width=True)
+        with c3: st.plotly_chart(fig_corr, use_container_width=True)
+        with c4: st.plotly_chart(fig_count_inter, use_container_width=True)
 
-        # Summary statistics
-        def format_mode(series):
-            mode_vals = series.mode()
-            if mode_vals.empty:
-                return 'N/A'
-            return ', '.join([f'{v:.1f}' if isinstance(v, (int, float)) else str(v) for v in mode_vals.tolist()])
-
-        heat_stats = filtered_temp['heat_index_c']
-        tweet_stats = merged_daily['jumlah_tweet']
-
-        st.markdown('#### Ringkasan Statistik')
+        # Deskripsi Statistik Harian
+        st.markdown("<br><h4 style='color:#00F0FF;'>📋 Ringkasan Statistik Deskriptif Harian</h4>", unsafe_allow_html=True)
         s1, s2 = st.columns(2)
         with s1:
-            st.markdown('**Heat Index (seluruh data terfilter)**')
-            st.write(f'- Mean: {heat_stats.mean():.2f} °C')
-            st.write(f'- Median: {heat_stats.median():.2f} °C')
-            st.write(f'- Mode: {format_mode(heat_stats)}')
-            st.write(f'- Min: {heat_stats.min():.2f} °C')
-            st.write(f'- Max: {heat_stats.max():.2f} °C')
+            st.markdown("**Parameter Fisis (Heat Index Harian):**")
+            st.write(f"- Rata-rata (Mean): {merged_daily['heat_index_c'].mean():.2f} °C")
+            st.write(f"- Nilai Tengah (Median): {merged_daily['heat_index_c'].median():.2f} °C")
+            st.write(f"- Minimum: {merged_daily['heat_index_c'].min():.2f} °C")
+            st.write(f"- Maksimum: {merged_daily['heat_index_c'].max():.2f} °C")
         with s2:
-            st.markdown('**Jumlah Cuitan Harian (agregat)**')
-            st.write(f'- Mean: {tweet_stats.mean():.2f}')
-            st.write(f'- Median: {tweet_stats.median():.2f}')
-            st.write(f'- Mode: {format_mode(tweet_stats)}')
-            st.write(f'- Min: {tweet_stats.min():.0f}')
-            st.write(f'- Max: {tweet_stats.max():.0f}')
+            st.markdown("**Parameter Sosial (Volume Cuitan Harian):**")
+            st.write(f"- Rata-rata (Mean): {merged_daily['jumlah_tweet'].mean():.1f} Tweet/hari")
+            st.write(f"- Nilai Tengah (Median): {merged_daily['jumlah_tweet'].median():.1f} Tweet/hari")
+            st.write(f"- Standar Deviasi: {merged_daily['jumlah_tweet'].std():.1f}")
+            st.write(f"- Puncak Cuitan Tertinggi: {merged_daily['jumlah_tweet'].max()} Tweet")
 
-with tab_month:
-    section_header("Tren Bulanan dan Peta Panas Jumlah Cuitan", "Melihat pola musiman percakapan publik dan indeks panas.")
+# ==================== TAB 2: ANALISIS BULANAN ====================
+with tab2:
+    section_header("Karakteristik & Pola Makro Bulanan", "Agregasi jangka panjang untuk melihat tren musiman dan anomali bulanan.")
+    
     if filtered_twitter.empty:
-        st.warning("Tidak ada data cuitan di rentang tanggal terpilih.")
+        st.warning("Tidak ada data untuk analisis bulanan.")
     else:
-        # Bulanan: jumlah cuitan per bulan
         twitter_month = filtered_twitter.copy()
         twitter_month['month'] = twitter_month['date'].dt.to_period('M').dt.to_timestamp()
         monthly_counts = twitter_month.groupby('month').size().reset_index(name='jumlah_bulanan')
 
-        fig_monthly = px.line(
-            monthly_counts,
-            x='month', y='jumlah_bulanan',
-            title='Jumlah Cuitan per Bulan',
-            labels={'month': 'Bulan', 'jumlah_bulanan': 'Jumlah Cuitan'},
-            template='plotly_white',
-            color_discrete_sequence=['#1F77B4']
-        )
-        polish_figure(fig_monthly, 360)
-        st.plotly_chart(fig_monthly, use_container_width=True)
-
-        # Grafik rata-rata heat index bulanan
         monthly_temp = filtered_temp.copy()
         monthly_temp['month'] = monthly_temp['date'].dt.to_period('M').dt.to_timestamp()
         avg_hi_monthly = monthly_temp.groupby('month')['heat_index_c'].mean().reset_index()
-        fig_monthly_hi = px.line(
-            avg_hi_monthly,
-            x='month', y='heat_index_c',
-            title='Rata-Rata Heat Index Bulanan',
-            labels={'month': 'Bulan', 'heat_index_c': 'Heat Index Rata-Rata (°C)'},
-            template='plotly_white',
-            color_discrete_sequence=['#E74C3C']
-        )
-        polish_figure(fig_monthly_hi, 340)
 
-        # Grafik korelasi bulanan heat index dan jumlah cuitan
-        monthly_twitter = filtered_twitter.copy()
-        monthly_twitter['month'] = monthly_twitter['date'].dt.to_period('M').dt.to_timestamp()
-        monthly_tweet_count = monthly_twitter.groupby('month').size().reset_index(name='jumlah_bulanan')
-        monthly_corr = pd.merge(avg_hi_monthly, monthly_tweet_count, on='month', how='inner')
-        corr_val_monthly = monthly_corr['heat_index_c'].corr(monthly_corr['jumlah_bulanan'])
-        corr_text_monthly = f"r={corr_val_monthly:.2f}" if not np.isnan(corr_val_monthly) else 'r=N/A'
-        fig_corr_monthly = px.scatter(
-            monthly_corr,
-            x='heat_index_c', y='jumlah_bulanan',
-            title=f'Korelasi Bulanan Heat Index vs Jumlah Cuitan ({corr_text_monthly})',
-            labels={'heat_index_c': 'Heat Index Rata-Rata (°C)', 'jumlah_bulanan': 'Jumlah Cuitan'},
-            template='plotly_white',
-            color_discrete_sequence=['#9467BD']
-        )
-        fig_corr_monthly.update_traces(marker=dict(size=10, opacity=0.78, line=dict(width=1, color="#FFFFFF")))
-        polish_figure(fig_corr_monthly, 340)
+        merged_monthly = pd.merge(avg_hi_monthly, monthly_counts, on='month', how='inner')
 
-        c1, c2 = st.columns(2)
-        with c1:
-            st.plotly_chart(fig_monthly_hi, use_container_width=True)
-        with c2:
-            st.plotly_chart(fig_corr_monthly, use_container_width=True)
+        # Grafik Bulanan
+        fig_monthly = px.line(merged_monthly, x='month', y='jumlah_bulanan', title='Akumulasi Volume Cuitan per Bulan', color_discrete_sequence=['#00F0FF'], markers=True)
+        polish_figure(fig_monthly, 320)
 
-        # Heatmap per-bulan (tidak terpengaruh sidebar) -> gunakan keseluruhan dataset `twitter_data`
+        fig_monthly_hi = px.line(merged_monthly, x='month', y='heat_index_c', title='Rata-Rata Bulanan Heat Index (°C)', color_discrete_sequence=['#FF0055'], markers=True)
+        polish_figure(fig_monthly_hi, 320)
+
+        corr_m = merged_monthly['heat_index_c'].corr(merged_monthly['jumlah_bulanan'])
+        fig_corr_m = px.scatter(merged_monthly, x='heat_index_c', y='jumlah_bulanan', title=f'Korelasi Tingkat Bulanan (r = {corr_m:.2f})', color_discrete_sequence=['#B900FF'], trendline="ols")
+        polish_figure(fig_corr_m, 320)
+
+        # HEATMAP PERBAIKAN: Menggunakan skala warna 'Reds' agar perbedaan kontras terlihat jelas
         tw_full = twitter_data.copy()
         tw_full['year'] = tw_full['date'].dt.year
         tw_full['month_num'] = tw_full['date'].dt.month
         monthly_full = tw_full.groupby(['year', 'month_num']).size().reset_index(name='count')
-        # Pivot: rows = year, cols = month_num (1..12)
         pivot = monthly_full.pivot_table(index='year', columns='month_num', values='count', fill_value=0)
-        if pivot.empty:
-            st.info('Tidak ada data bulanan untuk heatmap.')
-        else:
-            # ensure months ordered 1..12 as columns
+        
+        if not pivot.empty:
             pivot = pivot.reindex(columns=range(1,13), fill_value=0)
-            x_labels = [calendar.month_name[m] for m in pivot.columns]
-            y_labels = pivot.index.tolist()
-            fig_heat = px.imshow(
-                pivot.values,
-                labels=dict(x='Bulan', y='Tahun', color='Jumlah Cuitan'),
-                x=x_labels,
-                y=y_labels,
-                color_continuous_scale='Reds',
-                aspect='auto',
-                template='plotly_white'
-            )
-            polish_figure(fig_heat, 520)
-            st.plotly_chart(fig_heat, use_container_width=True)
+            x_labels = [calendar.month_abbr[m] for m in pivot.columns]
+            fig_heat = px.imshow(pivot.values, x=x_labels, y=pivot.index.tolist(), color_continuous_scale='Reds', aspect='auto')
+            fig_heat.update_layout(title="Matriks Kepadatan Volume Cuitan Historis (Tahun vs Bulan)")
+            polish_figure(fig_heat, 320)
 
-with tab2:
-    section_header("Karakteristik Komparasi Frekuensi Data", "Distribusi indeks termal dan intensitas keterlibatan publik.")
-    col_l, col_r = st.columns(2)
-    with col_l:
-        fig_hist = px.histogram(filtered_temp, x='heat_index_c', title="Kerapatan Distribusi Indeks Termal (°C)", color_discrete_sequence=['#F39C12'], template="plotly_white")
-        polish_figure(fig_hist, 380)
-        st.plotly_chart(fig_hist, use_container_width=True)
-    with col_r:
-        daily_interact_bar = filtered_twitter.groupby('date')['interaction_score'].sum().reset_index()
-        fig_bar = px.bar(daily_interact_bar, x='date', y='interaction_score', title="Intensitas Keterlibatan Publik Harian", color_discrete_sequence=['#16A085'], template="plotly_white")
-        polish_figure(fig_bar, 380)
-        st.plotly_chart(fig_bar, use_container_width=True)
+        # Layout Grid Grafik Bulanan
+        cx1, cx2 = st.columns(2)
+        with cx1: st.plotly_chart(fig_monthly, use_container_width=True)
+        with cx2: st.plotly_chart(fig_monthly_hi, use_container_width=True)
 
+        cx3, cx4 = st.columns(2)
+        with cx3: st.plotly_chart(fig_corr_m, use_container_width=True)
+        with cx4: st.plotly_chart(fig_heat, use_container_width=True)
+
+        # Deskripsi Statistik Bulanan
+        st.markdown("<br><h4 style='color:#00F0FF;'>📋 Ringkasan Statistik Deskriptif Bulanan</h4>", unsafe_allow_html=True)
+        sb1, sb2 = st.columns(2)
+        with sb1:
+            st.markdown("**Statistik Heat Index Bulanan:**")
+            st.write(f"- Rata-rata Nilai Bulanan: {merged_monthly['heat_index_c'].mean():.2f} °C")
+            st.write(f"- Standar Deviasi Bulanan: {merged_monthly['heat_index_c'].std():.2f} °C")
+        with sb2:
+            st.markdown("**Statistik Volume Cuitan Bulanan:**")
+            st.write(f"- Rata-rata Volume Bulanan: {merged_monthly['jumlah_bulanan'].mean():.1f} Tweet/bulan")
+            st.write(f"- Total Akumulasi Terpilih: {merged_monthly['jumlah_bulanan'].sum():,} Tweet")
+
+# ==================== TAB 3: TOP 10 LOG TWEET ====================
 with tab3:
-    section_header("Cuitan Terpopuler Wilayah Studi", "Cuitan dengan skor interaksi tertinggi pada rentang waktu aktif.")
+    section_header("Terminal Arsip Log Cuitan Terpopuler", "10 sampel cuitan masyarakat dengan skor interaksi (hype) tertinggi sebagai bahan kendali bias data.")
+    
     text_cols = [col for col in filtered_twitter.columns if 'teks' in col.lower() or 'tweet' in col.lower() or 'text' in col.lower()]
     user_cols = [col for col in filtered_twitter.columns if 'user' in col.lower() or 'nama' in col.lower()]
     rt_cols = [col for col in filtered_twitter.columns if 'retweet' in col.lower()]
@@ -406,28 +310,65 @@ with tab3:
     lk_key = like_cols[0] if like_cols else None
 
     if not filtered_twitter.empty and t_key in filtered_twitter.columns:
-        top_tweets = filtered_twitter.nlargest(10, 'interaction_score')
-        for _, tweet in top_tweets.iterrows():
+        top_10_tweets = filtered_twitter.nlargest(10, 'interaction_score')
+        
+        for rank, (_, tweet) in enumerate(top_10_tweets.iterrows(), 1):
             date_str = pd.to_datetime(tweet['date']).strftime('%Y-%m-%d') if 'date' in tweet and not pd.isna(tweet['date']) else ''
             user_name = escape(str(tweet[u_key]))
             tweet_text = escape(str(tweet[t_key]))
+            interaction = int(tweet['interaction_score'])
+            
             st.markdown(
                 f"""
-                <div style="background:#FFFFFF; border:1px solid #E6EAF0; border-radius:8px; padding:16px 18px; margin-bottom:12px; box-shadow:0 10px 22px rgba(17,24,39,0.05);">
-                    <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; color:#667085; font-size:0.9rem;">
-                        <strong style="color:#17212B;">@{user_name}</strong>
-                        <span>{date_str} | {int(tweet[rt_key]) if rt_key else 0} Retweets | {int(tweet[lk_key]) if lk_key else 0} Likes</span>
+                <div style="
+                    background: rgba(15, 23, 42, 0.6); 
+                    border: 1px solid #1E293B; 
+                    border-left: 4px solid #00F0FF; 
+                    border-radius: 8px; padding: 15px; margin-bottom: 12px;
+                ">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-family: monospace; font-size: 0.9rem;">
+                        <span style="color: #00F0FF; font-weight: bold;">RANK #{rank} @{user_name}</span>
+                        <span style="color: #64748B;">{date_str} | 🔥 Score: {interaction:,} (🔁 {int(tweet[rt_key]) if rt_key else 0} | ❤️ {int(tweet[lk_key]) if lk_key else 0})</span>
                     </div>
-                    <div style="color:#293846; margin-top:10px; line-height:1.55;">{tweet_text}</div>
+                    <div style="color: #E2E8F0; line-height: 1.5; font-style: italic;">"{tweet_text}"</div>
                 </div>
                 """,
                 unsafe_allow_html=True
             )
+
+# ==================== TAB 4: METODOLOGI & DATA ====================
+with tab4:
+    section_header("Dokumentasi Metodologi & Sumber Data", "Formulasi fisik matematika indeks termal dan verifikasi integritas struktur berkas berkas yang digunakan.")
+    
+    # PERBAIKAN LATEX: Notasi matematika dibersihkan agar rendering simbol presisi
+    st.markdown("#### 🔬 Formulasi Fisis (Persamaan Kompleks Regresi Rothfusz)")
+    st.latex(r"HI = c_1 + c_2T + c_3R + c_4TR + c_5T^2 + c_6R^2 + c_7T^2R + c_8TR^2 + c_9T^2R^2")
+    
+    st.markdown("#### 📐 Persamaan Pendekatan Sederhana (*Simple Equation*)")
+    st.latex(r"HI_{\text{simple}} = 0.5 \times \left[T + 61.0 + ((T - 68.0) \times 1.2) + (R \times 0.094)\right]")
+    
+    st.markdown("""
+    **Keterangan Variabel & Konstanta Konversi:**
+    * $HI$ = *Heat Index* / Indeks Panas fisis ($^{\circ}\text{C}$).
+    * $T$ = Temperatur udara permukaan hasil konversi ke unit Fahrenheit ($^{\circ}\text{F} = \frac{9}{5}T_{\text{C}} + 32$).
+    * $R$ = Kelembapan Relatif / *Relative Humidity* ($RH$) dalam format persentase skala basis 100.
+    * Matriks konstanta empiris fisis:
+    """)
+    
+    st.code("""
+    c1 = -42.379      c2 = 2.04901523   c3 = 10.14333127
+    c4 = -0.22475541  c5 = -0.00683783  c6 = -0.05481717
+    c7 = 0.00122874   c8 = 0.00085282   c9 = -0.00000199
+    """, language="python")
+
+    # PERBAIKAN DATA MENTAH: Menampilkan DataFrame gabungan harian yang bersih sesuai request
+    st.markdown("<br>#### 🔍 Peninjauan Integrasi Dataset Tergabung", unsafe_allow_html=True)
+    if not merged_daily.empty:
+        with st.expander("Klik untuk Meninjau Matriks Gabungan Variabel Harian"):
+            # Seleksi dan penataan ulang nama kolom sesuai permintaan
+            display_df = merged_daily[['date', 'air_temperature', 'relative_humidity', 'heat_index_c', 'jumlah_tweet']].copy()
+            display_df.columns = ['tanggal', 'air_temperature', 'relative_humidity', 'heat_index', 'jumlah cuitan harian']
             
-    section_header("Pengecekan Integritas Dataset")
-    with st.expander("Klik untuk Meninjau Data Mentah Historis"):
-        choice = st.selectbox("Pilih Tabel Sumber:", ["Meteorologi Dasar per Jam", "Respon Publik Media Sosial"])
-        if choice == "Meteorologi Dasar per Jam":
-            st.dataframe(filtered_temp, use_container_width=True)
-        else:
-            st.dataframe(filtered_twitter, use_container_width=True)
+            st.dataframe(display_df, use_container_width=True)
+    else:
+        st.warning("Gagal memuat matriks gabungan karena tidak ada data pada filter waktu terpilih.")
