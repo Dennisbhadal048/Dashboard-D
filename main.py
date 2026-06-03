@@ -107,10 +107,22 @@ halaman_proyek_2 = st.Page(
     icon="⚙️"
 )
 
+halaman_proyek_3 = st.Page(
+    "Page/proyek3.py", 
+    title="(PENGEMBANGAN!!!) Spatial Map Interpolator", 
+    icon="🗺️"
+)
+
+halaman_proyek_4 = st.Page(
+    "Page/proyek4.py",
+    title="Spatial Map Interpolator",
+    icon="🌧️"
+)
+
 # 4. INISIALISASI NAVIGASI
 pg = st.navigation({
     "MAIN HUB": [halaman_home],
-    "DATA MODULES": [halaman_proyek_1, halaman_proyek_2]
+    "DATA MODULES": [halaman_proyek_1, halaman_proyek_2, halaman_proyek_4]
 })
 
 pg.run()

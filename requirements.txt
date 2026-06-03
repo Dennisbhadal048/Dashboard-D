@@ -6,3 +6,9 @@ xarray
 netcdf4
 scipy
 cfgrib
+geopandas
+shapely
+folium
+cartopy
+contextily
+pillow
