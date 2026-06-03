@@ -12,3 +12,4 @@ folium
 cartopy
 contextily
 pillow
+statmodels
