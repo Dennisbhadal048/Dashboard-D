@@ -37,6 +37,8 @@ os.makedirs(GIS_DIR, exist_ok=True)
 @st.cache_data(show_spinner=False)
 def load_shapefile(file_path):
     """Membaca Shapefile / GeoJSON dengan caching & re-proyeksi otomatis ke EPSG:4326."""
+    import os
+    os.environ['SHAPE_RESTORE_SHX'] = 'YES'
     gdf = gpd.read_file(file_path)
     if gdf.crs is not None and gdf.crs != "EPSG:4326":
         gdf = gdf.to_crs("EPSG:4326")
