@@ -59,10 +59,7 @@ def get_files_in_folder(folder_path):
 def load_vector_data(file_path, ext, sep=','):
     """Membaca Shapefile / GeoJSON / CSV menjadi GeoDataFrame dengan penanganan CRS naive."""
     os.environ['SHAPE_RESTORE_SHX'] = 'YES'
-    # --- DEBUGGING ---
-    st.write("Daftar Kolom yang terdeteksi:", gdf.columns.tolist())
-    st.write("Isi 5 baris pertama data:", gdf.head())
-    # -----------------
+    
     if ext == ".csv":
         df = pd.read_csv(file_path, sep=sep)
         return df, "csv"
