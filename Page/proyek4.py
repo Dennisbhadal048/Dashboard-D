@@ -36,12 +36,22 @@ os.makedirs(GIS_DIR, exist_ok=True)
 # --- FUNGSI CACHING & OPTIMASI KECEPATAN ---
 @st.cache_data(show_spinner=False)
 def load_shapefile(file_path):
-    """Membaca Shapefile / GeoJSON dengan caching & re-proyeksi otomatis ke EPSG:4326."""
+    """Membaca Shapefile / GeoJSON dengan penanganan CRS naive."""
     import os
     os.environ['SHAPE_RESTORE_SHX'] = 'YES'
+    
+    # 1. Baca file
     gdf = gpd.read_file(file_path)
-    if gdf.crs is not None and gdf.crs != "EPSG:4326":
+    
+    # 2. PERBAIKAN: Jika file tidak memiliki CRS (naive), beri CRS default
+    if gdf.crs is None:
+        st.warning(f"File {os.path.basename(file_path)} tidak memiliki informasi CRS. Mengasumsikan EPSG:4326 (WGS84).")
+        gdf.set_crs("EPSG:4326", inplace=True)
+        
+    # 3. Transformasi jika CRS yang ada bukan EPSG:4326
+    elif gdf.crs != "EPSG:4326":
         gdf = gdf.to_crs("EPSG:4326")
+        
     return gdf
 
 @st.cache_data(show_spinner=False)
