@@ -59,12 +59,15 @@ def get_files_in_folder(folder_path):
 def load_vector_data(file_path, ext, sep=','):
     """Membaca Shapefile / GeoJSON / CSV menjadi GeoDataFrame dengan penanganan CRS naive."""
     os.environ['SHAPE_RESTORE_SHX'] = 'YES'
-    
+    # --- DEBUGGING ---
+    st.write("Daftar Kolom yang terdeteksi:", gdf.columns.tolist())
+    st.write("Isi 5 baris pertama data:", gdf.head())
+    # -----------------
     if ext == ".csv":
         df = pd.read_csv(file_path, sep=sep)
         return df, "csv"
     else:
-        gdf = gpd.read_file(file_path)
+        gdf = gpd.read_file(file_path, encoding='cp1252')
         if gdf.crs is None:
             gdf.set_crs("EPSG:4326", inplace=True)
         elif gdf.crs != "EPSG:4326":
@@ -375,7 +378,7 @@ def run_proyek4():
                         
                         # Iterasi fitur untuk merender Popup Custom & Model Titik CircleMarker
                         # Batasi hingga 600 fitur untuk menjaga performa browser
-                        max_render = 100000
+                        max_render = 600
                         for idx, row in gdf_loaded.head(max_render).iterrows():
                             geom = row.geometry
                             if geom is None or geom.is_empty:
