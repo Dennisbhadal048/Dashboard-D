@@ -375,7 +375,7 @@ def run_proyek4():
                         
                         # Iterasi fitur untuk merender Popup Custom & Model Titik CircleMarker
                         # Batasi hingga 600 fitur untuk menjaga performa browser
-                        max_render = 600
+                        max_render = 100000
                         for idx, row in gdf_loaded.head(max_render).iterrows():
                             geom = row.geometry
                             if geom is None or geom.is_empty:
