@@ -67,7 +67,7 @@ def load_vector_data(file_path, ext, sep=','):
         df = pd.read_csv(file_path, sep=sep)
         return df, "csv"
     else:
-        gdf = gpd.read_file(file_path, encoding='cp1252')
+        gdf = gpd.read_file(file_path)
         if gdf.crs is None:
             gdf.set_crs("EPSG:4326", inplace=True)
         elif gdf.crs != "EPSG:4326":
