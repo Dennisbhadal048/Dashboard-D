@@ -13,3 +13,5 @@ cartopy
 contextily
 pillow
 statsmodels
+streamlit-folium
+branca
