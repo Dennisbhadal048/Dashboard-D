@@ -4,14 +4,8 @@ import pandas as pd
 import numpy as np
 import os
 import io
-
-# --- CHECK LIBRARY CARTOPY & RASTERIO ---
-try:
-    import cartopy.crs as ccrs
-    import cartopy.feature as cfeature
-except ImportError:
-    st.error("⚠️ Library 'cartopy' belum terinstal. Jalankan di terminal: pip install cartopy")
-    st.stop()
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
 
 try:
     import rasterio
