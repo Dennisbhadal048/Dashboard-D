@@ -15,3 +15,5 @@ pillow
 statsmodels
 streamlit-folium
 branca
+cartopy.crs 
+cartopy.feature 
