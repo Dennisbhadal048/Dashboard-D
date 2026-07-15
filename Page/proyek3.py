@@ -4,8 +4,16 @@ import pandas as pd
 import numpy as np
 import os
 import io
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
+
+try:
+    import cartopy.crs as ccrs
+    import cartopy.feature as cfeature
+    CARTOPY_AVAILABLE = True
+except Exception as e:
+    ccrs = None
+    cfeature = None
+    CARTOPY_AVAILABLE = False
+    CARTOPY_IMPORT_ERROR = str(e)
 
 try:
     import rasterio
@@ -181,25 +189,8 @@ def run_proyek3():
     with col_map:
         if (file_type == "csv" and df_csv is not None) or (file_type == "tif" and raster_data is not None):
             with st.spinner("⚡ Sedang memproses visualisasi kartografi super cepat..."):
-                # Inisiasi Figure Cartopy
-                fig = plt.figure(figsize=(11, 7.5))
-                ax = plt.axes(projection=ccrs.PlateCarree())
-                
-                # Terapkan Bounding Box
-                ax.set_extent([lon_min, lon_max, lat_min, lat_max], crs=ccrs.PlateCarree())
-
-                # Layer Background Standar BMKG (Lautan Putih, Daratan Abu, Garis Hitam)
-                ax.add_feature(cfeature.OCEAN, facecolor='#ffffff', zorder=0)
-                ax.add_feature(cfeature.LAND, facecolor='#eaeaea', zorder=1)
-                ax.add_feature(cfeature.COASTLINE, edgecolor='#000000', linewidth=0.9, zorder=3)
-                ax.add_feature(cfeature.BORDERS, edgecolor='#333333', linestyle='--', linewidth=0.6, zorder=3)
-                
-                # Gridlines
-                gl = ax.gridlines(draw_labels=True, linewidth=0.5, color='gray', alpha=0.5, linestyle=':')
-                gl.top_labels = False
-                gl.right_labels = False
-                gl.xlabel_style = {'size': 9, 'color': '#333333'}
-                gl.ylabel_style = {'size': 9, 'color': '#333333'}
+                if not CARTOPY_AVAILABLE:
+                    st.warning("Cartopy tidak tersedia di environment ini, sehingga peta ditampilkan dengan mode fallback Matplotlib.")
 
                 # Tentukan Colormap & Normalisasi
                 if color_mode == "Classified (Diskret)":
@@ -207,56 +198,66 @@ def run_proyek3():
                 else:
                     cmap = plt.get_cmap(cmap_choice)
 
-                # ----------------------------------------------------
-                # RENDER DATA CSV (Warna Murni Tanpa Overlay Hitam!)
-                # ----------------------------------------------------
+                if CARTOPY_AVAILABLE:
+                    fig = plt.figure(figsize=(11, 7.5))
+                    ax = plt.axes(projection=ccrs.PlateCarree())
+                    ax.set_extent([lon_min, lon_max, lat_min, lat_max], crs=ccrs.PlateCarree())
+                    ax.add_feature(cfeature.OCEAN, facecolor='#ffffff', zorder=0)
+                    ax.add_feature(cfeature.LAND, facecolor='#eaeaea', zorder=1)
+                    ax.add_feature(cfeature.COASTLINE, edgecolor='#000000', linewidth=0.9, zorder=3)
+                    ax.add_feature(cfeature.BORDERS, edgecolor='#333333', linestyle='--', linewidth=0.6, zorder=3)
+                    gl = ax.gridlines(draw_labels=True, linewidth=0.5, color='gray', alpha=0.5, linestyle=':')
+                    gl.top_labels = False
+                    gl.right_labels = False
+                    gl.xlabel_style = {'size': 9, 'color': '#333333'}
+                    gl.ylabel_style = {'size': 9, 'color': '#333333'}
+                else:
+                    fig, ax = plt.subplots(figsize=(11, 7.5))
+                    ax.set_facecolor('#f8fafc')
+                    ax.set_xlim(lon_min, lon_max)
+                    ax.set_ylim(lat_min, lat_max)
+                    ax.grid(True, linestyle=':', alpha=0.4)
+
                 if file_type == "csv" and df_csv is not None:
                     x = df_csv[lon_col]
                     y = df_csv[lat_col]
                     z = df_csv[val_col]
-                    
-                    # Dinamis: Ukuran titik menyesuaikan jumlah data agar tetap elegan
                     pt_size = np.clip(2000 / len(df_csv), 12, 65)
-                    
-                    # PENTING: edgecolor='none' dan alpha=0.9 mencegah titik hitam menumpuk!
-                    plot_obj = ax.scatter(
-                        x, y, c=z, cmap=cmap, s=pt_size, 
-                        transform=ccrs.PlateCarree(), 
-                        edgecolor='none',  # Hapus border hitam yang merusak warna
-                        alpha=0.9,         # Halus dan menyatu dengan warna cbar
-                        zorder=2
-                    )
 
-                # ----------------------------------------------------
-                # RENDER DATA GEOTIFF (Raster Image)
-                # ----------------------------------------------------
+                    if CARTOPY_AVAILABLE:
+                        plot_obj = ax.scatter(
+                            x, y, c=z, cmap=cmap, s=pt_size,
+                            transform=ccrs.PlateCarree(),
+                            edgecolor='none',
+                            alpha=0.9,
+                            zorder=2
+                        )
+                    else:
+                        plot_obj = ax.scatter(x, y, c=z, cmap=cmap, s=pt_size, edgecolor='none', alpha=0.9)
+
                 elif file_type == "tif" and raster_data is not None:
                     img_data = raster_data.copy().astype(float)
                     if raster_nodata is not None:
                         img_data[img_data == raster_nodata] = np.nan
-                    
                     extent = [raster_bounds.left, raster_bounds.right, raster_bounds.bottom, raster_bounds.top]
-                    
-                    plot_obj = ax.imshow(
-                        img_data, origin='upper', extent=extent,
-                        cmap=cmap, transform=ccrs.PlateCarree(), zorder=2, alpha=0.9
-                    )
 
-                # --- COLORBAR (LEGENDA) ---
+                    if CARTOPY_AVAILABLE:
+                        plot_obj = ax.imshow(
+                            img_data, origin='upper', extent=extent,
+                            cmap=cmap, transform=ccrs.PlateCarree(), zorder=2, alpha=0.9
+                        )
+                    else:
+                        plot_obj = ax.imshow(img_data, origin='upper', extent=extent, cmap=cmap, alpha=0.9)
+
                 cbar = plt.colorbar(plot_obj, ax=ax, orientation='horizontal', pad=0.07, aspect=45, shrink=0.85)
                 cbar.set_label(legend_title, fontweight='bold', fontsize=11, color='#003366')
                 cbar.ax.tick_params(labelsize=9)
 
-                # --- JUDUL PETA ---
                 plt.title(map_title.upper(), pad=18, fontweight='bold', fontsize=13, color='#003366')
-
-                # Tampilkan ke Streamlit
                 st.pyplot(fig)
 
-                # --- TOMBOL DOWNLOAD RESOLUSI TINGGI (300 DPI) ---
                 buf = io.BytesIO()
                 fig.savefig(buf, format="png", dpi=300, bbox_inches="tight", facecolor='white')
-                
                 st.download_button(
                     label="⬇️ Download Peta Standar BMKG (Resolusi Tinggi 300 DPI)",
                     data=buf.getvalue(),
